@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>얼티밋 님 게임 (커스텀 & 힌트)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
+        body { font-family: 'Pretendard', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+        
+        .item-active {
+            transform: translateY(-8px) scale(1.1);
+            filter: brightness(1.5) drop-shadow(0 0 10px rgba(255, 255, 255, 0.5));
+        }
+    </style>
+</head>
+<body id="app-body" class="text-slate-100 min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 bg-slate-950">
+
+    <div id="game-card" class="max-w-xl w-full rounded-2xl shadow-2xl p-6 border border-white/10 transition-colors duration-500 bg-slate-900">
+        
+        <div class="mb-6 grid grid-cols-2 gap-4 bg-black/30 p-4 rounded-xl border border-white/10">
+            <div>
+                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">테마 전환</label>
+                <select id="theme-select" onchange="applyTheme()" class="w-full bg-black/50 font-bold rounded-lg px-3 py-2 border border-white/20 focus:outline-none transition-colors duration-300">
+                    <option value="match">🔥 불타는 성냥개비</option>
+                    <option value="stick">🪵 위태로운 막대기</option>
+                    <option value="bullet">🔫 일촉즉발 총알</option>
+                    <option value="stone">🪨 클래식 돌무더기</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-2">층수 세팅 (쉼표 구분)</label>
+                <div class="flex gap-2">
+                    <input type="text" id="row-input" value="1, 3, 5, 7" class="w-full bg-black/50 text-white font-bold rounded-lg px-3 py-2 border border-white/20 focus:outline-none focus:border-cyan-500">
+                    <button onclick="initGame()" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-3 py-2 rounded-lg transition-colors text-sm shrink-0">적용</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mb-4 flex justify-between items-end">
+            <div class="text-left">
+                <h1 id="game-title" class="text-2xl font-extrabold tracking-tight transition-colors duration-300">오리지널 님 게임</h1>
+                <p id="game-subtitle" class="text-xs text-gray-300 mt-1 opacity-80">마지막을 건드리는 자가 패배.</p>
+            </div>
+            <button onclick="toggleHint()" class="bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1">
+                💡 이진법 힌트
+            </button>
+        </div>
+
+        <div id="hint-panel" class="hidden mb-6 bg-black/60 border border-yellow-500/30 rounded-xl p-4 text-xs font-mono text-gray-300 shadow-inner">
+            <div class="text-yellow-400 font-bold mb-2 flex justify-between">
+                <span>[ 실시간 XOR 비트 계산기 ]</span>
+                <span>목표 Nim-Sum: 0</span>
+            </div>
+            <div id="hint-content" class="grid gap-1">
+                </div>
+        </div>
+
+        <div class="bg-black/50 rounded-xl p-6 mb-6 border border-white/5 shadow-inner min-h-[200px] max-h-[400px] overflow-y-auto flex flex-col justify-center gap-5" id="rows-container">
+            </div>
+
+        <div id="game-message" class="text-center text-base font-bold text-white h-6 mb-4 drop-shadow-md">
+            가져갈 아이템을 클릭해!
+        </div>
+
+        <button onclick="confirmMove()" id="confirm-btn" disabled class="w-full bg-slate-600 text-white text-base font-bold py-3.5 rounded-xl transition-all duration-300 shadow-lg opacity-50 cursor-not-allowed mb-2">
+            선택한 아이템 가져가기
+        </button>
+    </div>
+
+    <script>
+        const themeData = {
+            match: { bgClass: "bg-red-950", cardClass: "bg-red-900", btnClass: "bg-red-600", btnHover: "hover:bg-red-500", textClass: "text-red-300", render: (r, c) => `<div onclick="toggleItem(${r}, ${c})" id="item-${r}-${c}" class="cursor-pointer flex flex-col items-center transition-all duration-200 hover:scale-110 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]"><div class="w-3 h-4 bg-red-500 rounded-full"></div><div class="w-1.5 h-10 bg-amber-200 rounded-b-sm"></div></div>` },
+            stick: { bgClass: "bg-amber-950", cardClass: "bg-amber-900", btnClass: "bg-amber-600", btnHover: "hover:bg-amber-500", textClass: "text-amber-300", render: (r, c) => `<div onclick="toggleItem(${r}, ${c})" id="item-${r}-${c}" class="cursor-pointer w-3 h-12 bg-orange-300 rounded-full border border-orange-400 shadow-md transition-all duration-200 hover:scale-110"></div>` },
+            bullet: { bgClass: "bg-zinc-950", cardClass: "bg-zinc-900", btnClass: "bg-yellow-600", btnHover: "hover:bg-yellow-500", textClass: "text-yellow-400", render: (r, c) => `<div onclick="toggleItem(${r}, ${c})" id="item-${r}-${c}" class="cursor-pointer flex flex-col items-center shadow-lg transition-all duration-200 hover:scale-110"><div class="w-3 h-4 bg-yellow-400 rounded-t-full"></div><div class="w-3 h-7 bg-yellow-600 border-t border-yellow-700"></div></div>` },
+            stone: { bgClass: "bg-slate-950", cardClass: "bg-slate-900", btnClass: "bg-slate-600", btnHover: "hover:bg-slate-500", textClass: "text-slate-300", render: (r, c) => `<div onclick="toggleItem(${r}, ${c})" id="item-${r}-${c}" class="cursor-pointer w-7 h-7 bg-gray-400 rounded-full shadow-[inset_-2px_-2px_6px_rgba(0,0,0,0.4)] border border-gray-500 transition-all duration-200 hover:scale-110"></div>` }
+        };
+
+        let currentTheme = 'match';
+        let initialRows = [1, 3, 5, 7];
+        let rows = []; 
+        let selectedRow = null;
+        let selectedItems = new Set();
+        let isComputerTurn = false;
+        let hintVisible = false;
+
+        const allBgClasses = Object.values(themeData).map(d => d.bgClass);
+        const allCardClasses = Object.values(themeData).map(d => d.cardClass);
+        const allBtnClasses = Object.values(themeData).map(d => d.btnClass);
+        const allBtnHovers = Object.values(themeData).map(d => d.btnHover);
+        const allTextClasses = Object.values(themeData).map(d => d.textClass);
+
+        function applyTheme() {
+            currentTheme = document.getElementById('theme-select').value;
+            const data = themeData[currentTheme];
+            
+            document.getElementById('app-body').classList.remove(...allBgClasses); 
+            document.getElementById('app-body').classList.add(data.bgClass);
+            document.getElementById('game-card').classList.remove(...allCardClasses); 
+            document.getElementById('game-card').classList.add(data.cardClass);
+            document.getElementById('game-title').classList.remove(...allTextClasses); 
+            document.getElementById('game-title').classList.add(data.textClass);
+
+            updateUI();
+        }
+
+        function toggleHint() {
+            hintVisible = !hintVisible;
+            document.getElementById('hint-panel').style.display = hintVisible ? 'block' : 'none';
+            updateUI();
+        }
+
+        function parseInput() {
+            const val = document.getElementById('row-input').value;
+            let parsed = val.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n > 0);
+            if (parsed.length === 0) {
+                alert("제대로 된 숫자를 쉼표로 구분해서 넣어줘! (예: 1, 3, 5, 7)");
+                return [1, 3, 5, 7];
+            }
+            if (parsed.length > 10) {
+                alert("층이 너무 많으면 화면 터져! 최대 10개까지만 잘라 쓸게.");
+                parsed = parsed.slice(0, 10);
+            }
+            return parsed;
+        }
+
+        function initGame() {
+            initialRows = parseInput();
+            rows = [...initialRows];
+            selectedRow = null;
+            selectedItems.clear();
+            isComputerTurn = false;
+            setMessage("새 판 깔았어. 아이템을 클릭해!", "text-emerald-300");
+            updateUI();
+        }
+
+        function updateHint() {
+            if (!hintVisible) return;
+            
+            const content = document.getElementById('hint-content');
+            content.innerHTML = '';
+            
+            let maxVal = Math.max(...rows, ...initialRows);
+            let bitLen = maxVal.toString(2).length;
+            if (bitLen < 3) bitLen = 3; // 최소 3자리 보장
+
+            let xorSum = rows.reduce((a, b) => a ^ b, 0);
+
+            rows.forEach((count, i) => {
+                let bin = count.toString(2).padStart(bitLen, '0');
+                content.innerHTML += `
+                    <div class="flex justify-between items-center border-b border-gray-700/50 py-1">
+                        <span class="text-gray-400">Layer ${i + 1} (${count}개):</span>
+                        <span class="text-cyan-300 tracking-widest">${bin}</span>
+                    </div>
+                `;
+            });
+
+            let xorBin = xorSum.toString(2).padStart(bitLen, '0');
+            let statusColor = xorSum === 0 ? "text-emerald-400" : "text-rose-400";
+            
+            content.innerHTML += `
+                <div class="flex justify-between items-center mt-2 pt-1 border-t border-yellow-500/50">
+                    <span class="text-white font-bold">Nim-Sum (XOR 합):</span>
+                    <span class="font-bold tracking-widest ${statusColor}">${xorBin} <span class="text-gray-400 text-[10px]">(${xorSum})</span></span>
+                </div>
+            `;
+        }
+
+        function updateUI() {
+            const container = document.getElementById('rows-container');
+            container.innerHTML = '';
+            const data = themeData[currentTheme];
+
+            // 힌트 패널 업데이트
+            updateHint();
+
+            // 층 렌더링
+            rows.forEach((count, rowIndex) => {
+                if (count === 0) return; // 다 쓴 층은 숨김 처리 (깔끔한 UI)
+
+                const rowDiv = document.createElement('div');
+                rowDiv.className = "flex justify-center items-center gap-4 min-h-[3rem] flex-wrap";
+                
+                const label = document.createElement('div');
+                label.className = "w-8 text-xs text-gray-400 font-bold text-right shrink-0";
+                label.innerText = `L${rowIndex + 1}`;
+                rowDiv.appendChild(label);
+
+                const itemsDiv = document.createElement('div');
+                itemsDiv.className = "flex gap-2.5 flex-1 justify-start flex-wrap";
+                for (let i = 0; i < count; i++) {
+                    itemsDiv.innerHTML += data.render(rowIndex, i);
+                }
+                rowDiv.appendChild(itemsDiv);
+
+                container.appendChild(rowDiv);
+            });
+
+            if (rows.every(r => r === 0)) {
+                container.innerHTML = '<div class="text-center text-gray-500 font-bold">남은 아이템이 없습니다.</div>';
+            }
+
+            // 선택 상태 복원
+            selectedItems.forEach(id => {
+                const el = document.getElementById(`item-${id}`);
+                if(el) el.classList.add('item-active');
+            });
+
+            updateConfirmButton();
+        }
+
+        function toggleItem(r, c) {
+            if (isComputerTurn) return;
+
+            const itemId = `${r}-${c}`;
+            
+            if (selectedItems.has(itemId)) {
+                selectedItems.delete(itemId);
+                if (selectedItems.size === 0) selectedRow = null;
+            } else {
+                if (selectedRow !== null && selectedRow !== r) {
+                    setMessage("한 번에 같은 층에서만 뺄 수 있어!", "text-rose-400");
+                    return;
+                }
+                selectedRow = r;
+                selectedItems.add(itemId);
+                setMessage("개수 확인하고 버튼 눌러서 확정해.", "text-cyan-300");
+            }
+            updateUI();
+        }
+
+        function updateConfirmButton() {
+            const btn = document.getElementById('confirm-btn');
+            const data = themeData[currentTheme];
+            btn.classList.remove(...allBtnClasses, ...allBtnHovers);
+
+            if (selectedItems.size > 0) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btn.classList.add(data.btnClass, data.btnHover);
+                btn.innerText = `선택한 ${selectedItems.size}개 가져가기`;
+            } else {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed', 'bg-slate-600');
+                btn.innerText = `가져갈 아이템을 선택해`;
+            }
+        }
+
+        function setMessage(msg, colorClass) {
+            const msgEl = document.getElementById('game-message');
+            msgEl.innerText = msg;
+            msgEl.className = `text-center text-base font-bold h-6 mb-4 drop-shadow-md transition-colors ${colorClass}`;
+        }
+
+        function confirmMove() {
+            if (selectedItems.size === 0) return;
+            
+            rows[selectedRow] -= selectedItems.size;
+            selectedItems.clear();
+            selectedRow = null;
+            updateUI();
+
+            if (rows.every(r => r === 0)) {
+                setMessage('AI 승리! 마지막 거 네가 가져갔네? 😜', 'text-rose-400');
+                return;
+            }
+
+            isComputerTurn = true;
+            setMessage("AI가 이진법 굴리면서 계산 중...", "text-amber-300");
+            updateConfirmButton();
+            setTimeout(computerMove, 1000);
+        }
+
+        function computerMove() {
+            let xorSum = rows.reduce((a, b) => a ^ b, 0);
+            let cRow = -1;
+            let cTake = 0;
+
+            let greaterThanOne = rows.filter(r => r > 1).length;
+
+            if (greaterThanOne === 0) {
+                // Misere: 1개짜리만 남았을 때 홀수 개 남기기
+                cRow = rows.findIndex(r => r === 1);
+                cTake = 1;
+            } else if (greaterThanOne === 1) {
+                // Misere: 1개 초과 층이 딱 1개일 때
+                let ones = rows.filter(r => r === 1).length;
+                cRow = rows.findIndex(r => r > 1);
+                cTake = ones % 2 === 0 ? rows[cRow] - 1 : rows[cRow];
+            } else {
+                // 일반 필승 전략
+                if (xorSum !== 0) {
+                    for (let i = 0; i < rows.length; i++) {
+                        let target = rows[i] ^ xorSum;
+                        if (target < rows[i]) {
+                            cRow = i;
+                            cTake = rows[i] - target;
+                            break;
+                        }
+                    }
+                } else {
+                    // 컴퓨터가 불리한 상황 (XOR=0) -> 1개만 가져가서 넘기기
+                    cRow = rows.findIndex(r => r > 0);
+                    cTake = 1;
+                }
+            }
+
+            rows[cRow] -= cTake;
+            updateUI();
+
+            if (rows.every(r => r === 0)) {
+                setMessage('🎉 대박, 네가 AI를 이겼어! 실력 인정!', 'text-cyan-300');
+                isComputerTurn = true;
+                return;
+            }
+
+            setMessage(`AI가 L${cRow + 1}에서 ${cTake}개 가져감. 네 차례!`, 'text-emerald-300');
+            isComputerTurn = false;
+        }
+
+        window.onload = () => {
+            applyTheme();
+            initGame();
+        };
+    </script>
+</body>
+</html>
